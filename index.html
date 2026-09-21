@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Irrigation & Water Quality Dashboard</title>
+<style>
+  :root {
+    --bg: #0f172a; --bg-card: #1e293b; --bg-hover: #334155;
+    --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-muted: #64748b;
+    --border: #334155; --accent: #3b82f6; --accent-light: #60a5fa;
+    --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --info: #06b6d4;
+    --radius: 12px; --shadow: 0 4px 20px rgba(0,0,0,0.3); --transition: 0.3s ease;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text-primary); min-height: 100vh; padding: 20px; }
+  .container { max-width: 1400px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .header h1 { font-size: 24px; font-weight: 600; }
+  .header-sub { color: var(--text-secondary); font-size: 14px; margin-top: 2px; }
+  .status-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .status-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .status-pill.online { background: rgba(34,197,94,0.15); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+  .status-pill.offline { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+  .status-pill.warn { background: rgba(245,158,11,0.15); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .grid { display: grid; gap: 16px; }
+  .grid-4 { grid-template-columns: repeat(4,1fr); }
+  .grid-3 { grid-template-columns: repeat(3,1fr); }
+  .grid-2 { grid-template-columns: repeat(2,1fr); }
+  @media(max-width:1100px){ .grid-4{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:700px){ .grid-4,.grid-3,.grid-2{grid-template-columns:1fr} }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); transition: transform var(--transition), border-color var(--transition); }
+  .card:hover { border-color: var(--bg-hover); }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .card-title { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+  .card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  .card-icon.blue { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .card-icon.green { background: rgba(34,197,94,0.15); color: var(--success); }
+  .card-icon.orange { background: rgba(245,158,11,0.15); color: var(--warning); }
+  .card-icon.red { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .card-icon.cyan { background: rgba(6,182,212,0.15); color: var(--info); }
+  .metric-value { font-size: 32px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .metric-unit { font-size: 14px; color: var(--text-secondary); margin-left: 4px; }
+  .metric-label { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+  .metric-trend { font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 4px; }
+  .trend-up { color: var(--success); } .trend-down { color: var(--danger); }
+  .progress-bar { width: 100%; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 12px; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .fill-green { background: var(--success); } .fill-yellow { background: var(--warning); }
+  .fill-red { background: var(--danger); } .fill-blue { background: var(--accent); }
+  .control-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .control-row:last-child { border-bottom: none; }
+  .control-info { display: flex; align-items: center; gap: 10px; }
+  .control-name { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+  .control-status { font-size: 12px; color: var(--text-muted); }
+  .toggle { position: relative; width: 48px; height: 26px; border-radius: 13px; border: none; cursor: pointer; transition: background 0.3s ease; background: var(--border); }
+  .toggle.on { background: var(--success); }
+  .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: white; transition: transform 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  .toggle.on::after { transform: translateX(22px); }
+  .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn { padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
+  .btn:hover { background: var(--bg-hover); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-light); }
+  .btn-danger { background: rgba(239,68,68,0.15); border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: rgba(239,68,68,0.25); }
+  .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .tank-section { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .tank-visual { position: relative; width: 70px; height: 100px; border: 2px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
+  .tank-water { position: absolute; bottom: 0; left: 0; width: 100%; transition: height 0.5s ease, background 0.3s ease; border-radius: 0 0 7px 7px; }
+  .tank-info { flex: 1; min-width: 200px; }
+  .tank-percent { font-size: 28px; font-weight: 600; }
+  .tank-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .flow-path { margin-top: 16px; }
+  .flow-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+  .flow-visual { display: flex; align-items: center; gap: 6px; }
+  .flow-node { width: 14px; height: 14px; border-radius: 50%; background: var(--border); transition: all 0.3s ease; flex-shrink: 0; }
+  .flow-node.active { background: var(--success); box-shadow: 0 0 0 4px rgba(34,197,94,0.2); }
+  .flow-node.warn { background: var(--warning); box-shadow: 0 0 0 4px rgba(245,158,11,0.2); }
+  .flow-node.err { background: var(--danger); box-shadow: 0 0 0 4px rgba(239,68,68,0.2); }
+  .flow-pipe { flex: 1; height: 6px; background: var(--border); border-radius: 3px; position: relative; overflow: hidden; }
+  .flow-liquid { position: absolute; top: 0; left: 0; height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.5s ease; }
+  .flow-legend { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+  .alerts-container { max-height: 320px; overflow-y: auto; }
+  .alerts-container::-webkit-scrollbar { width: 6px; }
+  .alerts-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .alert-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 10px; margin-bottom: 10px; border-left: 3px solid transparent; transition: background 0.2s; }
+  .alert-item:hover { background: rgba(255,255,255,0.03); }
+  .alert-item:last-child { margin-bottom: 0; }
+  .alert-error { border-left-color: var(--danger); background: rgba(239,68,68,0.06); }
+  .alert-warn { border-left-color: var(--warning); background: rgba(245,158,11,0.06); }
+  .alert-info { border-left-color: var(--accent); background: rgba(59,130,246,0.06); }
+  .alert-icon { flex-shrink: 0; margin-top: 2px; }
+  .alert-content { flex: 1; }
+  .alert-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .alert-desc { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+  .alert-time { font-size: 11px; color: var(--text-muted); white-space: nowrap; margin-top: 2px; }
+  .alert-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .alert-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+  .alert-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .zone-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .zone-name { font-size: 16px; font-weight: 600; }
+  .zone-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .zone-dot.ok { background: var(--success); } .zone-dot.warn { background: var(--warning); }
+  .zone-dot.err { background: var(--danger); } .zone-dot.idle { background: var(--text-muted); }
+  .zone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .zone-stat { font-size: 13px; color: var(--text-secondary); }
+  .zone-stat span { color: var(--text-primary); font-weight: 500; }
+  .zone-state { margin-top: 12px; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; text-align: center; }
+  .zone-state.idle { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+  .zone-state.irrigating { background: rgba(59,130,246,0.15); color: var(--accent-light); }
+  .zone-state.needs-water { background: rgba(245,158,11,0.15); color: var(--warning); }
+  .zone-state.fault { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .section-title { font-size: 18px; font-weight: 600; margin: 28px 0 14px; display: flex; align-items: center; gap: 10px; }
+  .badge-count { background: var(--warning); color: var(--bg); font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; max-width: 400px; width: 90%; box-shadow: var(--shadow); }
+  .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+  .modal-text { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 10px; }
+  .toast { padding: 14px 18px; border-radius: 10px; font-size: 14px; color: white; max-width: 320px; box-shadow: var(--shadow); animation: slideIn 0.3s ease; display: flex; align-items: center; gap: 10px; }
+  @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+  .toast.success { background: var(--success); } .toast.error { background: var(--danger); }
+  .toast.warn { background: var(--warning); color: var(--bg); } .toast.info { background: var(--accent); }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:600px){ .settings-grid{grid-template-columns:1fr} }
+  .setting-item { display: flex; flex-direction: column; gap: 6px; }
+  .setting-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .setting-input { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .setting-input:focus { border-color: var(--accent); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .tab { padding: 10px 18px; border: none; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; margin-bottom: -1px; }
+  .tab:hover { color: var(--text-secondary); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; } .tab-content.active { display: block; }
+  .chart-placeholder { height: 200px; background: var(--bg); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 14px; border: 1px dashed var(--border); }
+  .footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; color: var(--text-muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1>Smart Irrigation & Water Quality</h1>
+      <div class="header-sub">ESP32 Edge Node | Syntax-IoT Platform</div>
+    </div>
+    <div class="status-bar">
+      <div class="status-pill online" id="conn-status"><span class="status-dot" style="background:var(--success)"></span> ESP32 Online</div>
+      <div class="status-pill online" id="sys-status"><span class="status-dot" style="background:var(--success)"></span> System OK</div>
+      <button class="btn" onclick="refreshData()" title="Refresh">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/></svg>
+      </button>
+      <button class="btn" onclick="toggleSettings()" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.67 15 1.65 1.65 0 003 13.5V13a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 7.67l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 5.4V5a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="grid grid-4">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Soil Moisture</span><div class="card-icon green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg></div></div>
+      <div><span class="metric-value" id="soil-moisture">42</span><span class="metric-unit">%</span></div>
+      <div class="metric-label">Zone A average</div>
+      <div class="progress-bar"><div class="progress-fill fill-green" id="soil-bar" style="width:42%"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Temperature</span><div class="card-icon orange"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg></div></div>
+      <div><span class="metric-value" id="temperature">28.4</span><span class="metric-unit">°C</span></div>
+      <div class="metric-label">Ambient air (SHT31)</div>
+      <div class="metric-trend trend-up" id="temp-trend"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>+1.2° from yesterday</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Humidity</span><div class="card-icon blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg></div></div>
+      <div><span class="metric-value" id="humidity">61</span><span class="metric-unit">%</span></div>
+      <div class="metric-label">Relative humidity</div>
+      <div class="metric-trend trend-down" id="hum-trend"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>-3% from yesterday</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Water pH</span><div class="card-icon cyan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></div></div>
+      <div><span class="metric-value" id="ph-value">6.8</span></div>
+      <div class="metric-label">Slightly acidic — within range</div>
+      <div class="progress-bar"><div class="progress-fill fill-green" id="ph-bar" style="width:68%"></div></div>
+    </div>
+  </div>
+
+  <div class="grid grid-4" style="margin-top:16px">
+    <div class="card">
+      <div class="card-header"><span class="card-title">EC / TDS</span><div class="card-icon blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div></div>
+      <div><span class="metric-value" id="ec-value">1.24</span><span class="metric-unit">mS/cm</span></div>
+      <div class="metric-label">Electrical conductivity</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Turbidity</span><div class="card-icon cyan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></div></div>
+      <div><span class="metric-value" id="turbidity">4.2</span><span class="metric-unit">NTU</span></div>
+      <div class="metric-label">Suspended particles</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Water Temp</span><div class="card-icon orange"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg></div></div>
+      <div><span class="metric-value" id="water-temp">22.1</span><span class="metric-unit">°C</span></div>
+      <div class="metric-label">Source water (DS18B20)</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Flow Rate</span><div class="card-icon green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div></div>
+      <div><span class="metric-value" id="flow-rate">0.0</span><span class="metric-unit">L/min</span></div>
+      <div class="metric-label">Current delivery (YF-S201)</div>
+    </div>
+  </div>
+
+  <div class="section-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M12 20V4m0 16l-7-7m7 7l7-7M5 12h14"/></svg>System Controls</div>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Pump & Zone Valves</span></div>
+      <div class="control-row">
+        <div class="control-info">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+          <div><div class="control-name">Main Water Pump</div><div class="control-status" id="pump-status-text">OFF — Idle</div></div>
+        </div>
+        <button class="toggle" id="pump-toggle" onclick="togglePump()"></button>
+      </div>
+      <div class="control-row">
+        <div class="control-info">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+          <div><div class="control-name">Valve Zone A</div><div class="control-status" id="valve-a-status">CLOSED</div></div>
+        </div>
+        <button class="toggle" id="valve-a-toggle" onclick="toggleValve('a')"></button>
+      </div>
+      <div class="control-row">
+        <div class="control-info">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+          <div><div class="control-name">Valve Zone B</div><div class="control-status" id="valve-b-status">CLOSED</div></div>
+        </div>
+        <button class="toggle" id="valve-b-toggle" onclick="toggleValve('b')"></button>
+      </div>
+      <div class="control-row">
+        <div class="control-info">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+          <div><div class="control-name">Valve Zone C</div><div class="control-status" id="valve-c-status">CLOSED — Sensor fault</div></div>
+        </div>
+        <button class="toggle" id="valve-c-toggle" onclick="toggleValve('c')" disabled></button>
+      </div>
+      <div class="control-row">
+        <div class="control-info">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+          <div><div class="control-name">Valve Zone D</div><div class="control-status" id="valve-d-status">CLOSED</div></div>
+        </div>
+        <button class="toggle" id="valve-d-toggle" onclick="toggleValve('d')"></button>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="startIrrigation()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start irrigation</button>
+        <button class="btn btn-danger" onclick="emergencyStop()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Emergency stop</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Water Tank & Flow Path</span></div>
+      <div class="tank-section">
+        <div>
+          <div class="tank-visual"><div class="tank-water" id="tank-water" style="height:72%;background:var(--accent)"></div></div>
+          <div style="text-align:center;margin-top:8px"><div class="tank-percent" id="tank-percent">72%</div><div class="tank-label">720 / 1000 L</div></div>
+        </div>
+        <div class="tank-info">
+          <div class="flow-path">
+            <div class="flow-label">System flow visualization</div>
+            <div class="flow-visual">
+              <div class="flow-node" id="flow-pump-node"></div>
+              <div class="flow-pipe"><div class="flow-liquid" id="flow-pipe-1" style="width:0%"></div></div>
+              <div class="flow-node" id="flow-zone-a-node"></div>
+              <div class="flow-pipe"><div class="flow-liquid" id="flow-pipe-2" style="width:0%"></div></div>
+              <div class="flow-node" id="flow-zone-b-node"></div>
+              <div class="flow-pipe"><div class="flow-liquid" id="flow-pipe-3" style="width:0%"></div></div>
+              <div class="flow-node" id="flow-zone-c-node"></div>
+              <div class="flow-pipe"><div class="flow-liquid" id="flow-pipe-4" style="width:0%"></div></div>
+              <div class="flow-node" id="flow-zone-d-node"></div>
+            </div>
+            <div class="flow-legend"><span>Pump</span><span>A</span><span>B</span><span>C</span><span>D</span></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:16px">
+            <div><div style="font-size:12px;color:var(--text-muted)">Delivered today</div><div style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums"><span id="delivered-today">124</span> <span style="font-size:13px;color:var(--text-secondary)">L</span></div></div>
+            <div><div style="font-size:12px;color:var(--text-muted)">Total flow (lifetime)</div><div style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums"><span id="total-flow">1,240</span> <span style="font-size:13px;color:var(--text-secondary)">L</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>Active Alerts <span class="badge-count" id="alert-count">3</span></div>
+  <div class="card"><div class="alerts-container" id="alerts-container"></div></div>
+
+  <div class="section-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>Zone Status</div>
+  <div class="grid grid-4">
+    <div class="card">
+      <div class="zone-header"><span class="zone-name">Zone A</span><span class="zone-dot ok" id="status-dot-a"></span></div>
+      <div class="zone-grid">
+        <div class="zone-stat">Moisture: <span id="zone-a-moist">42%</span></div>
+        <div class="zone-stat">Temp: <span id="zone-a-temp">27.8°C</span></div>
+        <div class="zone-stat">Last irr: <span>2h ago</span></div>
+        <div class="zone-stat">Valve: <span id="zone-a-valve">Closed</span></div>
+      </div>
+      <div class="zone-state idle" id="zone-a-state">Idle</div>
+    </div>
+    <div class="card">
+      <div class="zone-header"><span class="zone-name">Zone B</span><span class="zone-dot ok" id="status-dot-b"></span></div>
+      <div class="zone-grid">
+        <div class="zone-stat">Moisture: <span id="zone-b-moist">58%</span></div>
+        <div class="zone-stat">Temp: <span id="zone-b-temp">28.1°C</span></div>
+        <div class="zone-stat">Last irr: <span>5h ago</span></div>
+        <div class="zone-stat">Valve: <span id="zone-b-valve">Closed</span></div>
+      </div>
+      <div class="zone-state idle" id="zone-b-state">Idle</div>
+    </div>
+    <div class="card">
+      <div class="zone-header"><span class="zone-name">Zone C</span><span class="zone-dot err" id="status-dot-c"></span></div>
+      <div class="zone-grid">
+        <div class="zone-stat">Moisture: <span id="zone-c-moist" style="color:var(--danger)">0%</span></div>
+        <div class="zone-stat">Temp: <span id="zone-c-temp" style="color:var(--text-muted)">—</span></div>
+        <div class="zone-stat">Last irr: <span>1d ago</span></div>
+        <div class="zone-stat">Valve: <span id="zone-c-valve" style="color:var(--danger)">Blocked</span></div>
+      </div>
+      <div class="zone-state fault" id="zone-c-state">Sensor fault</div>
+    </div>
+    <div class="card">
+      <div class="zone-header"><span class="zone-name">Zone D</span><span class="zone-dot warn" id="status-dot-d"></span></div>
+      <div class="zone-grid">
+        <div class="zone-stat">Moisture: <span id="zone-d-moist">35%</span></div>
+        <div class="zone-stat">Temp: <span id="zone-d-temp">29.3°C</span></div>
+        <div class="zone-stat">Last irr: <span>6h ago</span></div>
+        <div class="zone-stat">Valve: <span id="zone-d-valve">Closed</span></div>
+      </div>
+      <div class="zone-state needs-water" id="zone-d-state">Needs water</div>
+    </div>
+  </div>
+
+  <div class="section-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>Data & Analytics</div>
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('history')">Irrigation History</button>
+      <button class="tab" onclick="switchTab('water-usage')">Water Usage</button>
+      <button class="tab" onclick="switchTab('sensor-trends')">Sensor Trends</button>
+      <button class="tab" onclick="switchTab('system-logs')">System Logs</button>
+    </div>
+    <div class="tab-content active" id="tab-history">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="border-bottom:1px solid var(--border);color:var(--text-muted);text-align:left"><th style="padding:10px">Time</th><th style="padding:10px">Zone</th><th style="padding:10px">Duration</th><th style="padding:10px">Volume</th><th style="padding:10px">Status</th></tr></thead>
+        <tbody id="history-table">
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px">08:30</td><td style="padding:10px">A</td><td style="padding:10px">12 min</td><td style="padding:10px">18 L</td><td style="padding:10px"><span style="color:var(--success)">Completed</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px">08:15</td><td style="padding:10px">D</td><td style="padding:10px">15 min</td><td style="padding:10px">22 L</td><td style="padding:10px"><span style="color:var(--success)">Completed</span></td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px">07:45</td><td style="padding:10px">B</td><td style="padding:10px">—</td><td style="padding:10px">—</td><td style="padding:10px"><span style="color:var(--warning)">Skipped (moisture OK)</span></td></tr>
+          <tr><td style="padding:10px">06:00</td><td style="padding:10px">A, D</td><td style="padding:10px">20 min</td><td style="padding:10px">35 L</td><td style="padding:10px"><span style="color:var(--success)">Completed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tab-content" id="tab-water-usage">
+      <div class="chart-placeholder">Water usage chart — integrate Chart.js or similar library here</div>
+      <div class="grid grid-3" style="margin-top:16px">
+        <div style="text-align:center;padding:16px;background:var(--bg);border-radius:8px"><div style="font-size:28px;font-weight:600;color:var(--accent)">124</div><div style="font-size:12px;color:var(--text-muted)">Liters today</div></div>
+        <div style="text-align:center;padding:16px;background:var(--bg);border-radius:8px"><div style="font-size:28px;font-weight:600;color:var(--success)">892</div><div style="font-size:12px;color:var(--text-muted)">Liters this week</div></div>
+        <div style="text-align:center;padding:16px;background:var(--bg);border-radius:8px"><div style="font-size:28px;font-weight:600;color:var(--warning)">3,240</div><div style="font-size:12px;color:var(--text-muted)">Liters this month</div></div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-sensor-trends"><div class="chart-placeholder">Sensor trend charts — integrate Chart.js or similar library here</div></div>
+    <div class="tab-content" id="tab-system-logs">
+      <div style="background:var(--bg);border-radius:8px;padding:16px;font-family:monospace;font-size:12px;color:var(--text-secondary);max-height:200px;overflow-y:auto" id="system-logs">
+        <div style="margin-bottom:6px"><span style="color:var(--text-muted)">[17:45:02]</span> ESP32 connected via Wi-Fi</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text-muted)">[17:45:03]</span> All sensors initialized</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text-muted)">[17:45:05]</span> MQTT broker connected (syntax-iot.cloud)</div>
+        <div style="margin-bottom:6px"><span style="color:var(--warning)">[17:45:10]</span> WARNING: Zone C soil sensor not responding</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text-muted)">[17:45:12]</span> Telemetry publishing started (5s interval)</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text-muted)">[17:50:00]</span> Scheduled check — Zone B moisture 58% (skip)</div>
+        <div style="margin-bottom:6px"><span style="color:var(--warning)">[17:52:15]</span> WARNING: EC level 1.24 mS/cm near upper limit</div>
+        <div style="margin-bottom:6px"><span style="color:var(--text-muted)">[18:00:00]</span> Heartbeat OK — all systems nominal</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Smart Irrigation & Water Quality Management System | Ziad Elmekawy | Syntax-IoT Platform | ESP32 Edge Node v1.0</div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-title">System Settings</div>
+    <div class="modal-text">Configure thresholds and crop parameters for the irrigation decision engine.</div>
+    <div class="settings-grid" style="margin-bottom:20px">
+      <div class="setting-item"><label class="setting-label">Soil moisture threshold (%)</label><input class="setting-input" type="number" id="setting-moisture" value="40" min="0" max="100"></div>
+      <div class="setting-item"><label class="setting-label">pH min / max</label><div style="display:flex;gap:8px"><input class="setting-input" type="number" id="setting-ph-min" value="6.0" step="0.1" style="flex:1"><input class="setting-input" type="number" id="setting-ph-max" value="7.5" step="0.1" style="flex:1"></div></div>
+      <div class="setting-item"><label class="setting-label">EC max (mS/cm)</label><input class="setting-input" type="number" id="setting-ec-max" value="1.5" step="0.1"></div>
+      <div class="setting-item"><label class="setting-label">Tank minimum (%)</label><input class="setting-input" type="number" id="setting-tank-min" value="15" min="0" max="100"></div>
+      <div class="setting-item"><label class="setting-label">Irrigation duration (min)</label><input class="setting-input" type="number" id="setting-duration" value="15" min="1" max="60"></div>
+      <div class="setting-item"><label class="setting-label">Flow expected (L/min)</label><input class="setting-input" type="number" id="setting-flow" value="2.5" step="0.1"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="toggleSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+/* =========================================================================
+   MQTT CONFIG
+   Only temperature, humidity and the pump are wired to the real ESP32 for
+   now (DHT22 + relay). Everything else (soil moisture, pH, EC, tank, flow,
+   zones B/C/D) is still simulated placeholder data until more sensors are
+   added to the edge node.
+
+   IMPORTANT: browsers can only speak MQTT over WebSockets, not raw TCP.
+   Point MQTT_WS_URL at your broker's WebSocket listener (e.g. Mosquitto's
+   "listener 8083 / protocol websockets", or a cloud broker's wss:// port).
+   This is a DIFFERENT port from the one the ESP32 firmware uses (1883).
+   ========================================================================= */
+const MQTT_WS_URL   = "wss://YOUR_BROKER_HOST:8084/mqtt"; // e.g. wss://broker.example.com:8084/mqtt
+const MQTT_USERNAME = "";  // leave blank if the broker has no auth
+const MQTT_PASSWORD = "";
+const DEVICE_ID      = "esp32-01";
+
+const TOPIC_TELEMETRY = `syntaxiot/irrigation/${DEVICE_ID}/telemetry`;
+const TOPIC_STATUS    = `syntaxiot/irrigation/${DEVICE_ID}/status`;
+const TOPIC_CMD_PUMP  = `syntaxiot/irrigation/${DEVICE_ID}/cmd/pump`;
+
+let mqttClient = null;
+
+const appState = {
+  pump: false, valves: { a: false, b: false, c: false, d: false },
+  sensors: { soilMoisture: 42, temperature: 28.4, humidity: 61, ph: 6.8, ec: 1.24, turbidity: 4.2, waterTemp: 22.1, flowRate: 0, tankLevel: 72, deliveredToday: 124, totalFlow: 1240 },
+  zones: {
+    a: { moisture: 42, temp: 27.8, status: 'idle', lastIrr: '2h ago' },
+    b: { moisture: 58, temp: 28.1, status: 'idle', lastIrr: '5h ago' },
+    c: { moisture: 0, temp: null, status: 'fault', lastIrr: '1d ago' },
+    d: { moisture: 35, temp: 29.3, status: 'needs-water', lastIrr: '6h ago' }
+  },
+  settings: { moistureThreshold: 40, phMin: 6.0, phMax: 7.5, ecMax: 1.5, tankMin: 15, duration: 15, flowExpected: 2.5 },
+  alerts: [
+    { id: 1, type: 'warn', title: 'Water quality warning', desc: 'EC level at 1.24 mS/cm is near upper limit for lettuce crop. Monitor closely.', time: '2 min ago', ack: false },
+    { id: 2, type: 'info', title: 'Scheduled irrigation skipped', desc: 'Zone B soil moisture at 58% — above threshold. Irrigation cycle auto-skipped.', time: '15 min ago', ack: false },
+    { id: 3, type: 'error', title: 'Sensor anomaly — Zone C', desc: 'Soil moisture sensor reading stuck at 0% for 10 min. Check wiring or replace sensor.', time: '32 min ago', ack: false }
+  ]
+};
+
+/* ---------------- MQTT: connect, subscribe, handle incoming data ---------------- */
+function connectMQTT() {
+  const options = {
+    clientId: 'dashboard-' + Math.random().toString(16).slice(2, 10),
+    clean: true,
+    connectTimeout: 4000,
+    reconnectPeriod: 3000,
+  };
+  if (MQTT_USERNAME) { options.username = MQTT_USERNAME; options.password = MQTT_PASSWORD; }
+
+  mqttClient = mqtt.connect(MQTT_WS_URL, options);
+
+  mqttClient.on('connect', () => {
+    setConnStatus(true);
+    addLog('Connected to MQTT broker');
+    mqttClient.subscribe(TOPIC_TELEMETRY);
+    mqttClient.subscribe(TOPIC_STATUS);
+  });
+
+  mqttClient.on('reconnect', () => addLog('Reconnecting to MQTT broker...'));
+  mqttClient.on('close', () => setConnStatus(false));
+  mqttClient.on('error', (err) => { console.error('MQTT error:', err); setConnStatus(false); });
+
+  mqttClient.on('message', (topic, message) => {
+    const payload = message.toString();
+
+    if (topic === TOPIC_TELEMETRY) {
+      try {
+        const data = JSON.parse(payload);
+        if (typeof data.temperature === 'number') appState.sensors.temperature = data.temperature;
+        if (typeof data.humidity === 'number') appState.sensors.humidity = data.humidity;
+        if (typeof data.pump === 'boolean') appState.pump = data.pump;
+        if (data.sensor_ok === false) {
+          showToast('DHT22 read failed on device — using ideal fallback values', 'warn');
+        }
+        updateUI();
+      } catch (e) {
+        console.error('Bad telemetry payload:', payload, e);
+      }
+    }
+
+    if (topic === TOPIC_STATUS) {
+      setConnStatus(payload === 'online');
+    }
+  });
+}
+
+function setConnStatus(online) {
+  const el = document.getElementById('conn-status');
+  if (online) {
+    el.className = 'status-pill online';
+    el.innerHTML = '<span class="status-dot" style="background:var(--success)"></span> ESP32 Online';
+  } else {
+    el.className = 'status-pill offline';
+    el.innerHTML = '<span class="status-dot" style="background:var(--danger)"></span> ESP32 Offline';
+  }
+}
+
+function publishPumpCommand(on) {
+  if (!mqttClient || !mqttClient.connected) {
+    showToast('Not connected to MQTT broker — cannot send command', 'error');
+    return false;
+  }
+  mqttClient.publish(TOPIC_CMD_PUMP, on ? 'ON' : 'OFF');
+  return true;
+}
+
+function updateUI() {
+  document.getElementById('soil-moisture').textContent = appState.sensors.soilMoisture;
+  document.getElementById('soil-bar').style.width = appState.sensors.soilMoisture + '%';
+  document.getElementById('temperature').textContent = appState.sensors.temperature.toFixed(1);
+  document.getElementById('humidity').textContent = appState.sensors.humidity;
+  document.getElementById('ph-value').textContent = appState.sensors.ph.toFixed(1);
+  document.getElementById('ph-bar').style.width = (appState.sensors.ph / 14 * 100) + '%';
+  document.getElementById('ec-value').textContent = appState.sensors.ec.toFixed(2);
+  document.getElementById('turbidity').textContent = appState.sensors.turbidity.toFixed(1);
+  document.getElementById('water-temp').textContent = appState.sensors.waterTemp.toFixed(1);
+  document.getElementById('flow-rate').textContent = appState.sensors.flowRate.toFixed(1);
+
+  document.getElementById('tank-percent').textContent = appState.sensors.tankLevel + '%';
+  const tw = document.getElementById('tank-water');
+  tw.style.height = appState.sensors.tankLevel + '%';
+  tw.style.background = appState.sensors.tankLevel < 20 ? 'var(--danger)' : appState.sensors.tankLevel < 40 ? 'var(--warning)' : 'var(--accent)';
+
+  document.getElementById('delivered-today').textContent = appState.sensors.deliveredToday;
+  document.getElementById('total-flow').textContent = appState.sensors.totalFlow.toLocaleString();
+
+  document.getElementById('pump-toggle').classList.toggle('on', appState.pump);
+  document.getElementById('pump-status-text').textContent = appState.pump ? 'ON — Running' : 'OFF — Idle';
+
+  ['a','b','c','d'].forEach(z => {
+    const t = document.getElementById('valve-' + z + '-toggle');
+    const s = document.getElementById('valve-' + z + '-status');
+    const vt = document.getElementById('zone-' + z + '-valve');
+    if (appState.zones[z].status === 'fault') {
+      t.disabled = true; s.textContent = 'CLOSED — Sensor fault'; vt.textContent = 'Blocked'; vt.style.color = 'var(--danger)';
+    } else {
+      t.disabled = false; t.classList.toggle('on', appState.valves[z]);
+      s.textContent = appState.valves[z] ? 'OPEN' : 'CLOSED';
+      vt.textContent = appState.valves[z] ? 'Open' : 'Closed'; vt.style.color = '';
+    }
+  });
+
+  document.getElementById('flow-pump-node').classList.toggle('active', appState.pump);
+  ['a','b','c','d'].forEach((z, i) => {
+    const active = appState.pump && appState.valves[z] && appState.zones[z].status !== 'fault';
+    document.getElementById('flow-zone-' + z + '-node').classList.toggle('active', active);
+    document.getElementById('flow-pipe-' + (i + 1)).style.width = active ? '100%' : '0%';
+  });
+
+  document.getElementById('zone-a-moist').textContent = appState.zones.a.moisture + '%';
+  document.getElementById('zone-a-temp').textContent = appState.zones.a.temp + '°C';
+  const za = document.getElementById('zone-a-state');
+  za.textContent = appState.zones.a.status === 'irrigating' ? 'Irrigating' : appState.zones.a.status === 'idle' ? 'Idle' : 'Needs water';
+  za.className = 'zone-state ' + (appState.zones.a.status === 'irrigating' ? 'irrigating' : appState.zones.a.status === 'idle' ? 'idle' : 'needs-water');
+
+  document.getElementById('zone-b-moist').textContent = appState.zones.b.moisture + '%';
+  document.getElementById('zone-b-temp').textContent = appState.zones.b.temp + '°C';
+  const zb = document.getElementById('zone-b-state');
+  zb.textContent = appState.zones.b.status === 'irrigating' ? 'Irrigating' : 'Idle';
+  zb.className = 'zone-state ' + (appState.zones.b.status === 'irrigating' ? 'irrigating' : 'idle');
+
+  document.getElementById('zone-d-moist').textContent = appState.zones.d.moisture + '%';
+  document.getElementById('zone-d-temp').textContent = appState.zones.d.temp + '°C';
+  const zd = document.getElementById('zone-d-state');
+  zd.textContent = appState.zones.d.status === 'irrigating' ? 'Irrigating' : 'Needs water';
+  zd.className = 'zone-state ' + (appState.zones.d.status === 'irrigating' ? 'irrigating' : 'needs-water');
+
+  updateDot('a'); updateDot('b'); updateDot('c'); updateDot('d');
+
+  const sys = document.getElementById('sys-status');
+  const hasErr = appState.alerts.some(a => a.type === 'error' && !a.ack);
+  const hasWarn = appState.alerts.some(a => a.type === 'warn' && !a.ack);
+  if (hasErr) { sys.className = 'status-pill offline'; sys.innerHTML = '<span class="status-dot" style="background:var(--danger)"></span> Fault detected'; }
+  else if (hasWarn) { sys.className = 'status-pill warn'; sys.innerHTML = '<span class="status-dot" style="background:var(--warning)"></span> Warning active'; }
+  else { sys.className = 'status-pill online'; sys.innerHTML = '<span class="status-dot" style="background:var(--success)"></span> System OK'; }
+}
+
+function updateDot(z) {
+  const d = document.getElementById('status-dot-' + z);
+  const st = appState.zones[z].status;
+  d.className = 'zone-dot ' + (st === 'fault' ? 'err' : st === 'needs-water' ? 'warn' : st === 'irrigating' ? 'ok' : 'idle');
+}
+
+function togglePump() {
+  const next = !appState.pump;
+
+  // Send the real command to the ESP32's relay over MQTT.
+  // appState.pump itself will be confirmed/updated when the next telemetry
+  // message echoes back the relay's actual state — this is just the
+  // optimistic UI update plus the local flow-rate simulation.
+  if (!publishPumpCommand(next)) return;
+
+  appState.pump = next;
+  if (appState.pump) {
+    appState.sensors.flowRate = appState.settings.flowExpected;
+    showToast('Pump ON command sent', 'success'); addLog('Pump ON command published to ' + TOPIC_CMD_PUMP);
+    setTimeout(() => { if (appState.pump && appState.sensors.flowRate < 0.5) addAlert('error', 'Pump failure detected', 'Pump is ON but flow rate is near zero. Check pump and pipes.'); }, 3000);
+  } else {
+    appState.sensors.flowRate = 0; showToast('Pump OFF command sent', 'info'); addLog('Pump OFF command published to ' + TOPIC_CMD_PUMP);
+  }
+  updateUI();
+}
+
+function toggleValve(zone) {
+  if (appState.zones[zone].status === 'fault') { showToast('Cannot operate Zone ' + zone.toUpperCase() + ' — sensor fault', 'error'); return; }
+  appState.valves[zone] = !appState.valves[zone];
+  showToast('Zone ' + zone.toUpperCase() + ' valve ' + (appState.valves[zone] ? 'opened' : 'closed'), 'info');
+  addLog('Zone ' + zone.toUpperCase() + ' valve ' + (appState.valves[zone] ? 'opened' : 'closed'));
+  updateUI();
+}
+
+function startIrrigation() {
+  if (appState.sensors.tankLevel < appState.settings.tankMin) {
+    addAlert('error', 'Low tank level', 'Cannot start — tank at ' + appState.sensors.tankLevel + '%. Minimum: ' + appState.settings.tankMin + '%.');
+    showToast('Cannot start — low tank level', 'error'); return;
+  }
+  if (appState.sensors.ph < appState.settings.phMin || appState.sensors.ph > appState.settings.phMax)
+    addAlert('warn', 'Water pH out of range', 'pH ' + appState.sensors.ph + ' outside range (' + appState.settings.phMin + ' - ' + appState.settings.phMax + ').');
+  if (appState.sensors.ec > appState.settings.ecMax)
+    addAlert('warn', 'High EC warning', 'EC ' + appState.sensors.ec + ' exceeds max ' + appState.settings.ecMax + '.');
+
+  if (!appState.pump) { appState.pump = true; appState.sensors.flowRate = appState.settings.flowExpected; }
+  const targets = [];
+  ['a','b','c','d'].forEach(z => {
+    if (appState.zones[z].status !== 'fault' && appState.zones[z].moisture < appState.settings.moistureThreshold) {
+      appState.valves[z] = true; appState.zones[z].status = 'irrigating'; targets.push(z.toUpperCase());
+    }
+  });
+  if (targets.length === 0) {
+    showToast('No zones need irrigation — all above threshold', 'warn');
+    if (!appState.valves.a && !appState.valves.b && !appState.valves.c && !appState.valves.d) { appState.pump = false; appState.sensors.flowRate = 0; }
+    updateUI(); return;
+  }
+  showToast('Irrigation started — Zones ' + targets.join(', '), 'success');
+  addLog('Irrigation started: ' + targets.join(', '));
+  addAlert('info', 'Irrigation cycle started', 'Pump ON. Zones ' + targets.join(', ') + ' opened. Target: ' + appState.settings.duration + ' min.');
+
+  setTimeout(() => {
+    if (!appState.pump) return;
+    const vol = Math.round(appState.settings.flowExpected * appState.settings.duration);
+    appState.sensors.deliveredToday += vol; appState.sensors.totalFlow += vol;
+    appState.sensors.tankLevel = Math.max(0, appState.sensors.tankLevel - Math.round(vol / 10));
+    targets.forEach(z => { appState.valves[z.toLowerCase()] = false; appState.zones[z.toLowerCase()].status = 'idle'; appState.zones[z.toLowerCase()].moisture = Math.min(100, appState.zones[z.toLowerCase()].moisture + 15); });
+    appState.pump = false; appState.sensors.flowRate = 0;
+    showToast('Irrigation completed — ' + vol + 'L delivered', 'success');
+    addLog('Irrigation completed: ' + vol + 'L to zones ' + targets.join(', '));
+    addAlert('info', 'Irrigation completed', 'Delivered ' + vol + 'L to zones ' + targets.join(', ') + '. Tank now at ' + appState.sensors.tankLevel + '%.');
+    updateUI();
+  }, appState.settings.duration * 1000);
+  updateUI();
+}
+
+function emergencyStop() {
+  appState.pump = false; appState.valves = { a: false, b: false, c: false, d: false };
+  ['a','b','c','d'].forEach(z => { if (appState.zones[z].status === 'irrigating') appState.zones[z].status = 'idle'; });
+  appState.sensors.flowRate = 0; updateUI();
+  showToast('EMERGENCY STOP — All actuators halted', 'error');
+  addLog('EMERGENCY STOP triggered by user');
+  addAlert('error', 'EMERGENCY STOP', 'All actuators halted immediately by user command.');
+}
+
+function addAlert(type, title, desc) {
+  const id = Date.now();
+  appState.alerts.unshift({ id, type, title, desc, time: 'Just now', ack: false });
+  if (appState.alerts.length > 10) appState.alerts.pop();
+  renderAlerts(); updateUI();
+}
+
+function acknowledgeAlert(id) {
+  const a = appState.alerts.find(x => x.id === id);
+  if (a) { a.ack = true; renderAlerts(); updateUI(); showToast('Alert acknowledged', 'info'); }
+}
+
+function dismissAlert(id) {
+  appState.alerts = appState.alerts.filter(a => a.id !== id);
+  renderAlerts(); updateUI();
+}
+
+function renderAlerts() {
+  const c = document.getElementById('alerts-container');
+  const count = document.getElementById('alert-count');
+  const unack = appState.alerts.filter(a => !a.ack);
+  count.textContent = unack.length;
+  const ec = unack.filter(a => a.type === 'error').length;
+  const wc = unack.filter(a => a.type === 'warn').length;
+  count.style.background = ec > 0 ? 'var(--danger)' : wc > 0 ? 'var(--warning)' : 'var(--success)';
+  count.style.color = ec > 0 || wc > 0 ? 'white' : 'var(--bg)';
+
+  const icons = {
+    error: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+    warn: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+    info: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+  };
+  const cls = { error: 'alert-error', warn: 'alert-warn', info: 'alert-info' };
+
+  c.innerHTML = appState.alerts.map(a => `
+    <div class="alert-item ${cls[a.type]}">
+      <div class="alert-icon">${icons[a.type]}</div>
+      <div class="alert-content">
+        <div class="alert-title">${a.title}</div>
+        <div class="alert-desc">${a.desc}</div>
+        ${!a.ack ? `<div class="alert-actions"><button class="alert-btn" onclick="acknowledgeAlert(${a.id})">Acknowledge</button><button class="alert-btn" onclick="dismissAlert(${a.id})">Dismiss</button></div>` : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">Acknowledged</div>'}
+      </div>
+      <div class="alert-time">${a.time}</div>
+    </div>
+  `).join('');
+}
+
+function showToast(msg, type) {
+  const tc = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  const icons = { success: '✓', error: '✕', warn: '⚠', info: 'ℹ' };
+  t.innerHTML = '<span>' + icons[type] + '</span>' + msg;
+  tc.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(100%)'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+function addLog(msg) {
+  const logs = document.getElementById('system-logs');
+  const now = new Date();
+  const time = '[' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0') + ']';
+  const div = document.createElement('div');
+  div.style.marginBottom = '6px';
+  div.innerHTML = '<span style="color:var(--text-muted)">' + time + '</span> ' + msg;
+  logs.insertBefore(div, logs.firstChild);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+function toggleSettings() {
+  document.getElementById('settings-modal').classList.toggle('show');
+}
+
+function saveSettings() {
+  appState.settings.moistureThreshold = parseFloat(document.getElementById('setting-moisture').value);
+  appState.settings.phMin = parseFloat(document.getElementById('setting-ph-min').value);
+  appState.settings.phMax = parseFloat(document.getElementById('setting-ph-max').value);
+  appState.settings.ecMax = parseFloat(document.getElementById('setting-ec-max').value);
+  appState.settings.tankMin = parseFloat(document.getElementById('setting-tank-min').value);
+  appState.settings.duration = parseFloat(document.getElementById('setting-duration').value);
+  appState.settings.flowExpected = parseFloat(document.getElementById('setting-flow').value);
+  showToast('Settings saved', 'success');
+  addLog('Settings updated');
+  toggleSettings();
+}
+
+function refreshData() {
+  showToast('Data refreshed', 'info');
+  addLog('Manual data refresh');
+  // Temperature/humidity/pump now come live from the ESP32 over MQTT and are
+  // NOT randomized here. Only the sensors not yet wired to real hardware
+  // (pH, EC) still get simulated placeholder values.
+  appState.sensors.ph = 6.5 + Math.random() * 0.6;
+  appState.sensors.ec = 1.1 + Math.random() * 0.3;
+  updateUI();
+}
+
+// Live simulation loop
+setInterval(() => {
+  if (appState.pump) {
+    appState.sensors.flowRate = appState.settings.flowExpected + (Math.random() - 0.5) * 0.3;
+    document.getElementById('flow-rate').textContent = appState.sensors.flowRate.toFixed(1);
+  }
+}, 2000);
+
+// Initialize
+setConnStatus(false); // offline until the MQTT connection confirms otherwise
+updateUI();
+renderAlerts();
+connectMQTT();
+</script>
+</body>
+</html>
